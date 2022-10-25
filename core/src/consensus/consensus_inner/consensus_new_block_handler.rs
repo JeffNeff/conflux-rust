@@ -632,6 +632,10 @@ impl ConsensusNewBlockHandler {
         valid
     }
 
+    ##RM
+    ## How long the time out should be? 
+    ## Should there be a time out?
+    ## 
     fn check_block_full_validity(
         &self, new: usize, inner: &mut ConsensusGraphInner, adaptive: bool,
         anticone_barrier: &BitSet, weight_tuple: Option<&Vec<i128>>,
@@ -639,6 +643,24 @@ impl ConsensusNewBlockHandler {
     {
         let parent = inner.arena[new].parent;
         let force_confirm = inner.arena[new].data.force_confirm;
+
+        // look at the miner of the parent block
+        // if the miner of the parent block is the same as the miner of the new block
+        // then a 10 block timeout is set for this miner and the new block is invalid
+        if inner.arena[parent].data.miner == inner.arena[new].data.miner {
+            debug!("Block invalid (index = {}), miner of the parent block {} index {} is the same as the miner of the new block {} index {}!", new, inner.arena[parent].hash, parent, inner.arena[new].hash, new);
+            // set a 10 block timeout for the miner of the parent block
+            inner.arena[parent].data.timeout = 10;
+            return false;
+        }
+
+        // check if the miner of the new block is in the timeout list
+        // if the miner of the new block is in the timeout list
+        // then the new block is invalid
+        if inner.arena[new].data.timeout > 0 {
+            debug!("Block invalid (index = {}), miner of the new block {} index {} is in the timeout list!", new, inner.arena[new].hash, new);
+            return false;
+        }
 
         if inner.lca(parent, force_confirm) != force_confirm {
             warn!("Partially invalid due to picking incorrect parent (force confirmation {:?} violation). {:?}", force_confirm, inner.arena[new].hash);
@@ -711,6 +733,12 @@ impl ConsensusNewBlockHandler {
             }
         }
 
+        // tick down the timeout for all the miners in the timeout list
+        for i in 0..inner.arena.len() {
+            if inner.arena[i].data.timeout > 0 {
+                inner.arena[i].data.timeout -= 1;
+            }
+        }
         return true;
     }
 
